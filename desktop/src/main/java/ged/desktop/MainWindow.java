@@ -795,7 +795,8 @@ final class MainWindow extends JFrame implements Actions {
             if (file == null || !file.id().equals(info.id())) return;
             file = info;
             dirtyCount = (int) info.dirtyCount();
-            watcher.saw(info.revision());
+            // not watcher.saw(info.revision()): a newer edit may have landed after the page
+            // began loading, and only the watcher reporting it brings the page up to date
             sidebar.updateInfo(info);
             statusBar.file(info);
             updateToolbar();

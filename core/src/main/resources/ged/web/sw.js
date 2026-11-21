@@ -1,7 +1,7 @@
 // gedcom-shell service worker: keeps the app's own files so it opens
 // quickly and offline. It never touches /api/: family data always comes
 // fresh from the daemon (and the token never meets a cache).
-const VERSION = 'gedcom-shell-v3';
+const VERSION = 'gedcom-shell-v4';
 const SHELL = [
   '/',
   '/index.html',

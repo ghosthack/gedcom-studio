@@ -236,12 +236,8 @@ async function refreshFile() {
     const f = await api.file(app.fileId);
     if (f.id !== app.fileId) return;
     app.file = f;
-    if (f.instance && f.instance !== app.instance) {
-      app.instance = f.instance;
-      app.revision = f.revision;
-    } else {
-      app.revision = Math.max(app.revision, f.revision);
-    }
+    // app.revision and app.instance are left to the live loop: moving them on here
+    // could swallow an edit (or a daemon restart) the page hasn't loaded yet
     updateFrame();
   } catch { /* the live loop will notice */ }
 }
