@@ -1,0 +1,33 @@
+target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+# private family files: name them *.private.ged (or list them in .git/info/exclude)
+*.private.ged
+
+# chart output and saved pictures, wherever they land (chart -o NAME.html/.png/.svg, Save as PDF)
+*.html
+*.png
+*.svg
+*.zip
+*.pdf
+*.jpg
+*.jpeg
+# ...except test fixtures, which may need to be committed (extension by extension, so
+# private .ged files stay ignored)
+!/core/src/test/resources/**/*.html
+!/core/src/test/resources/**/*.png
+!/core/src/test/resources/**/*.svg
+!/core/src/test/resources/**/*.zip
+!/core/src/test/resources/**/*.pdf
+!/core/src/test/resources/**/*.jpg
+!/core/src/test/resources/**/*.jpeg
+# ...and the web app and the desktop app's icons
+!/core/src/main/resources/ged/web/**
+!/desktop/src/main/resources/**
+!/packaging/**
+# the web app's browser tests (web-tests/): installed packages and reports
+node_modules/
+/web-tests/test-results/
+/web-tests/playwright-report/

@@ -1,0 +1,337 @@
+package ged.shell;
+
+import ged.edit.FamilyForm;
+import ged.edit.PersonForm;
+import ged.edit.Records;
+import ged.model.Family;
+import ged.model.Person;
+import ged.text.Style;
+import ged.vfs.Location;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+final class EditCommand implements Command {
+    @Override public String name() { return "edit"; }
+    @Override public boolean takesPaths() { return true; }
+    @Override public String summary() { return "change a person's name, sex, events and facts, or a family's marriage and divorce"; }
+
+    @Override
+    public String usage() {
+        return """
+                edit [PATH] [FIELD=VALUE...]
+
+                With no assignments, opens the person or family (default: where you
+                are) as a short form in $VISUAL / $EDITOR (default vi). Save and quit
+                to apply; quit without saving, or exit non-zero (:cq), to cancel. If a
+                value is invalid the form reopens with the error at the top.
+
+                With assignments, applies them directly, which is handy in scripts:
+
+                  edit sex=F
+                  edit mother birth.date="12 jun 1850" birthplace="Genova, Italia"
+                  edit @I12@ deceased=yes
+                  edit christened="20 jun 1850" buried=1920 burialplace=Staglieno
+                  edit occupation=Sailor residence=Livorno
+                  edit census.date=1881 census.place=London religion=Methodist
+                  edit emigrated=1890 cremated=1950
+                  edit surname=Rossi given="Maria Luisa"
+                  edit families/F4 married="12 jun 1870" marriage.place=Roma
+                  edit @F2@ divorced=yes
+
+                Changes are held in memory (the prompt shows *) until you run `save`.
+                To change who belongs to a family, see `help link` and `help unlink`.
+
+                Person fields:
+                %s
+                  aliases: first, last, gender, born, birthplace, died, deathplace, dead,
+                  baptism, christened, baptismplace, buried, burialplace, job, residence
+                More events, each as NAME.date and NAME.place (census.date=1881):
+                %s
+                More facts, with a value (religion=Catholic):
+                %s
+                  aliases: an event's verb or GEDCOM tag (emigrated, cremated, cens),
+                  NAMEplace (emigratedplace); the form shows these once recorded
+                Occupation, residence and the events and facts above edit the first
+                one recorded; others are kept.
+                Family fields: %s
+                  aliases: married, wedding, marriageplace, divorce, divorceplace
+                Dates: %s
+                """.formatted(
+                Style.wrap(personFields(f -> !f.isExtra(), false), "  ", 76),
+                Style.wrap(personFields(f -> f.isExtra() && !f.isAttribute(), true), "  ", 76),
+                Style.wrap(personFields(f -> f.isExtra() && f.isAttribute(), true), "  ", 76),
+                Arrays.stream(FamilyForm.Field.values()).map(f -> f.key).collect(Collectors.joining(", ")),
+                ged.model.GedDate.EXAMPLES);
+    }
+
+    /// Person field keys, or with `nouns` each event's name once.
+    private static List<String> personFields(java.util.function.Predicate<PersonForm.Field> which, boolean nouns) {
+        return Arrays.stream(PersonForm.Field.values()).filter(which)
+                .map(f -> nouns ? f.noun() : f.key).distinct().toList();
+    }
+
+    @Override
+    public void run(List<String> args, Context ctx) {
+        var path = "";
+        var assignments = new LinkedHashMap<String, String>();
+        for (var a : args) {
+            int eq = a.indexOf('=');
+            if (eq > 0) {
+                var key = a.substring(0, eq);
+                if (assignments.put(key, a.substring(eq + 1)) != null) throw new CommandException(key + " given twice");
+            } else if (path.isEmpty()) {
+                path = a;
+            } else {
+                throw new CommandException("unexpected '" + a + "' (quote values with spaces: birthplace=\"Genova, Italia\")");
+            }
+        }
+        var loc = ctx.nav().resolve(path).location();
+        Editable<?> target = switch (loc) {
+            case Location.PersonDir(var p) -> new PersonEdit(p, ctx);
+            case Location.FamilyDir(var f) -> new FamilyEdit(f, ctx);
+            default -> throw new CommandException("only people and families can be edited; "
+                    + ctx.fs().describe(loc) + " is neither");
+        };
+        if (assignments.isEmpty()) interactive(target, ctx);
+        else commit(target, assignments, ctx);
+    }
+
+    /// One change, as shown after an edit.
+    private record Row(String field, String before, String after) {}
+
+    /// A person or family seen through its form. `C` is the form's change type.
+    private abstract static class Editable<C> {
+        abstract String key();
+        abstract String render(String error);
+        /// @throws IllegalArgumentException with a user-facing message
+        abstract List<C> diff(Map<String, String> byKey);
+        /// The changes a form asks for, against what it showed: the record
+        /// may have changed while the form was out.
+        /// @throws IllegalArgumentException with a user-facing message
+        /// @throws ged.edit.Conflict if a field it changes was changed meanwhile
+        abstract List<C> diffForm(String text);
+        /// Takes the record as it now is as what the form showed, once the
+        /// person has been told what changed.
+        abstract void reseen();
+        abstract List<Row> rows(List<C> changes);
+        /// Applies the changes; returns the heading to print above them.
+        abstract String apply(List<C> changes);
+        /// Things worth pointing out once the changes are applied.
+        List<String> notes() { return List.of(); }
+
+        /// Maps `FIELD=VALUE` keys to form fields.
+        static <F> Map<F, String> fields(Map<String, String> byKey, Function<String, Optional<F>> parse,
+                                         Function<String, String> unknown) {
+            var out = new LinkedHashMap<F, String>();
+            for (var e : byKey.entrySet()) {
+                var f = parse.apply(e.getKey()).orElseThrow(() -> new CommandException(unknown.apply(e.getKey())));
+                if (out.put(f, e.getValue()) != null) throw new CommandException(e.getKey() + " given twice");
+            }
+            return out;
+        }
+    }
+
+    private static final class PersonEdit extends Editable<PersonForm.Change> {
+        private final String id;
+        private final String key;
+        private final Context ctx;
+        private Map<PersonForm.Field, String> seen;
+
+        PersonEdit(Person p, Context ctx) {
+            this.id = p.id();
+            this.key = p.key();
+            this.ctx = ctx;
+            this.seen = PersonForm.values(p);
+        }
+
+        /// The person as they are now; another front end may have changed
+        /// them, or deleted them, while the form was out.
+        private Person p() {
+            return ctx.g().person(id).orElseThrow(() -> new CommandException(key + " was deleted meanwhile; nothing was changed"));
+        }
+
+        @Override String key() { return key; }
+        @Override String render(String error) { return PersonForm.render(p(), error); }
+        @Override void reseen() { seen = PersonForm.values(p()); }
+
+        @Override
+        List<PersonForm.Change> diff(Map<String, String> byKey) {
+            return PersonForm.diff(p(), fields(byKey, PersonForm.Field::parse, this::unknown), ctx.g().isGedcom7());
+        }
+
+        /// Points family fields at the family they belong to.
+        private String unknown(String key) {
+            if (FamilyForm.Field.parse(key).isEmpty()) return "unknown field '" + key + "' (see: help edit)";
+            var p = p();
+            var families = ctx.g().familiesAsSpouse(p);
+            var where = families.size() == 1 ? "edit families/" + families.getFirst().key() + " " + key + "=…"
+                    : families.isEmpty() ? "and " + p.name().display() + " has no family as a partner"
+                    : "use: edit families/F… " + key + "=… (one of: "
+                      + families.stream().map(Family::key).collect(Collectors.joining(", ")) + ")";
+            return key + " is a family field: " + where;
+        }
+
+        @Override List<PersonForm.Change> diffForm(String text) { return PersonForm.diffForm(p(), seen, text, ctx.g().isGedcom7()); }
+
+        @Override
+        List<Row> rows(List<PersonForm.Change> changes) {
+            return changes.stream().map(c -> new Row(c.field().key, c.before(), c.after())).toList();
+        }
+
+        @Override
+        String apply(List<PersonForm.Change> changes) {
+            var fresh = PersonForm.apply(ctx.g(), p(), changes);
+            var s = ctx.style();
+            notes.clear();
+            if (changes.stream().anyMatch(c -> c.field() == PersonForm.Field.SEX)) {
+                for (var f : ctx.g().familiesAsSpouse(fresh)) {
+                    boolean husband = f.husband().filter(fresh.id()::equals).isPresent();
+                    boolean clash = husband ? fresh.sex() == Person.Sex.FEMALE : fresh.sex() == Person.Sex.MALE;
+                    if (clash) notes.add("note: still recorded as the " + (husband ? "husband" : "wife") + " in " + f.key()
+                            + "; to swap: unlink /families/" + f.key() + "/" + (husband ? "husband" : "wife")
+                            + ", then link " + fresh.key() + " /families/" + f.key() + "/" + (husband ? "wife" : "husband"));
+                }
+            }
+            return s.bold(fresh.name().display()) + "  " + s.dim(fresh.key());
+        }
+
+        private final List<String> notes = new java.util.ArrayList<>();
+
+        @Override List<String> notes() { return notes; }
+    }
+
+    private static final class FamilyEdit extends Editable<FamilyForm.Change> {
+        private final String id;
+        private final String key;
+        private final Context ctx;
+        private Map<FamilyForm.Field, String> seen;
+
+        FamilyEdit(Family f, Context ctx) {
+            this.id = f.id();
+            this.key = f.key();
+            this.ctx = ctx;
+            this.seen = FamilyForm.values(f);
+        }
+
+        private Family f() {
+            return ctx.g().family(id).orElseThrow(() -> new CommandException(key + " was deleted meanwhile; nothing was changed"));
+        }
+
+        @Override String key() { return key; }
+        @Override String render(String error) { return FamilyForm.render(ctx.g(), f(), error); }
+        @Override void reseen() { seen = FamilyForm.values(f()); }
+
+        @Override
+        List<FamilyForm.Change> diff(Map<String, String> byKey) {
+            return FamilyForm.diff(f(), fields(byKey, FamilyForm.Field::parse, key ->
+                    PersonForm.Field.parse(key).isPresent()
+                            ? key + " is a person field: edit husband, wife or a child (e.g. edit husband " + key + "=…)"
+                            : "unknown field '" + key + "' (see: help edit)"), ctx.g().isGedcom7());
+        }
+
+        @Override List<FamilyForm.Change> diffForm(String text) { return FamilyForm.diffForm(f(), seen, text, ctx.g().isGedcom7()); }
+
+        @Override
+        List<Row> rows(List<FamilyForm.Change> changes) {
+            return changes.stream().map(c -> new Row(c.field().key, c.before(), c.after())).toList();
+        }
+
+        @Override
+        String apply(List<FamilyForm.Change> changes) {
+            var fresh = FamilyForm.apply(ctx.g(), f(), changes);
+            var s = ctx.style();
+            return s.bold(ctx.fs().familyTitle(fresh)) + "  " + s.dim(fresh.key());
+        }
+    }
+
+    private <C> void commit(Editable<C> target, Map<String, String> byKey, Context ctx) {
+        List<C> changes;
+        try {
+            changes = target.diff(byKey);
+        } catch (IllegalArgumentException e) {
+            throw new CommandException(e.getMessage());
+        }
+        show(target, changes, ctx);
+    }
+
+    private <C> void interactive(Editable<C> target, Context ctx) {
+        String error = null;
+        try {
+            var file = Files.createTempFile("ged-" + target.key() + "-", ".txt");
+            try {
+                var form = target.render(null);
+                // after a conflict the form comes back as typed; saving it as it is applies it
+                boolean conflicted = false;
+                while (true) {
+                    Files.writeString(file, form, StandardCharsets.UTF_8);
+                    boolean saved;
+                    try {
+                        // the other front ends carry on while the form is out
+                        saved = ctx.store().outside(() -> ctx.editor().edit(file));
+                    } catch (IllegalStateException e) {
+                        throw new CommandException(e.getMessage());
+                    } catch (IOException | RuntimeException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new CommandException("editor: " + e.getMessage());
+                    }
+                    ctx.nav().refresh();
+                    var edited = Files.readString(file, StandardCharsets.UTF_8);
+                    if (!saved || (edited.equals(form) && !conflicted)) {
+                        ctx.out().println(ctx.style().dim("edit cancelled; nothing changed"));
+                        return;
+                    }
+                    try {
+                        show(target, target.diffForm(edited), ctx);
+                        return;
+                    } catch (IllegalArgumentException e) {
+                        conflicted = e instanceof ged.edit.Conflict;
+                        if (conflicted) target.reseen();
+                        error = e.getMessage() + (conflicted ? "; save again to apply your values anyway" : "");
+                        form = Records.reopened(edited, error); // their text, not the record's
+                        ctx.out().println(ctx.style().red("edit: " + error) + ctx.style().dim("  (reopening the form)"));
+                    }
+                }
+            } finally {
+                Files.deleteIfExists(file);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private <C> void show(Editable<C> target, List<C> changes, Context ctx) {
+        var s = ctx.style();
+        if (changes.isEmpty()) {
+            ctx.out().println(s.dim("no changes"));
+            return;
+        }
+        var heading = target.apply(changes);
+        ctx.nav().refresh();
+        ctx.out().println(heading + "  " + changes.size() + (changes.size() == 1 ? " change" : " changes"));
+        var rows = target.rows(changes);
+        int width = Math.max(12, rows.stream().mapToInt(r -> r.field().length() + 1).max().orElse(0));
+        for (var c : rows) {
+            ctx.out().println("  " + s.cyan(Style.pad(c.field(), width)) + " "
+                    + (c.before().isEmpty() ? s.dim("(empty)") : s.red(c.before())) + s.dim(" → ")
+                    + (c.after().isEmpty() ? s.dim("(removed)") : s.green(c.after())));
+        }
+        target.notes().forEach(n -> ctx.out().println(s.yellow(n)));
+        unsaved(ctx);
+    }
+
+    static void unsaved(Context ctx) {
+        var s = ctx.style();
+        ctx.out().println(s.yellow("unsaved") + s.dim(": " + ctx.g().dirtyCount() + " record(s) modified; run `save` to write the file"));
+    }
+}
