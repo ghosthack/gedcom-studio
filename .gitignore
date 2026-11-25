@@ -23,6 +23,8 @@ target/
 !/core/src/test/resources/**/*.pdf
 !/core/src/test/resources/**/*.jpg
 !/core/src/test/resources/**/*.jpeg
+# the architecture page
+!/docs/*.html
 # ...and the web app and the desktop app's icons
 !/core/src/main/resources/ged/web/**
 !/desktop/src/main/resources/**
