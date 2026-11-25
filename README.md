@@ -360,6 +360,8 @@ add person "Ana Ruiz"                 not linked to anyone yet
 
 ## Design
 
+[docs/architecture.html](docs/architecture.html) is an illustrated overview: open it in a browser.
+
 ```
 ged.gedcom   bytes → text → Node tree     encoding detection, ANSEL, CONT/CONC
 ged.model    Node tree → Person/Family    Genealogy = indexes + relationship queries

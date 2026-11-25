@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gedcom-studio Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column, wide diagram bands; GEDCOM's own level-numbered lines as the recurring detail */
+:root {
+  --bg: #f3f6f5;
+  --panel: #ffffff;
+  --ink: #17211e;
+  --ink-2: #4a5a55;
+  --line: #c9d5d1;
+  --accent: #0c6b5f;
+  --accent-soft: #dcefeb;
+  --file: #9a6417;
+  --file-soft: #f5ead8;
+  --code-bg: #e8eeec;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101615; --panel: #172120; --ink: #e2ebe8; --ink-2: #9db0aa; --line: #2c3a37;
+    --accent: #52c3b0; --accent-soft: #173430; --file: #e3ad55; --file-soft: #33281a; --code-bg: #1c2826;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101615; --panel: #172120; --ink: #e2ebe8; --ink-2: #9db0aa; --line: #2c3a37;
+  --accent: #52c3b0; --accent-soft: #173430; --file: #e3ad55; --file-soft: #33281a; --code-bg: #1c2826;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 17px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+main { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 3.5rem; }
+.col { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); font-stretch: 85%; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 700; font-stretch: 90%; }
+p { margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 4px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.eyebrow {
+  font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.06em; color: var(--accent);
+  text-transform: uppercase; font-weight: 600;
+}
+section { display: flex; flex-direction: column; gap: 1.1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 62ch; }
+
+header.top { padding-top: 3rem; display: flex; flex-direction: column; gap: 1rem; }
+.gedline { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-2); }
+.gedline b { color: var(--file); font-weight: 600; }
+
+/* diagram */
+.figure { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 720px; height: auto; }
+.figure figcaption { font-size: 0.92rem; color: var(--ink-2); margin-top: 0.6rem; max-width: 70ch; }
+figure { margin: 0; }
+svg text { font-family: var(--body); fill: var(--ink); }
+svg .t-title { font-family: var(--display); font-weight: 700; font-size: 17px; font-stretch: 88%; }
+svg .t-sub { font-size: 13px; fill: var(--ink-2); }
+svg .t-mono { font-family: var(--mono); font-size: 11.5px; fill: var(--ink-2); }
+svg .t-label { font-size: 12px; fill: var(--ink-2); }
+svg .t-daemon { font-family: var(--mono); font-size: 12px; fill: var(--accent); font-weight: 600; letter-spacing: 0.04em; }
+svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+svg .client { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.5; }
+svg .daemon { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; }
+svg .core { fill: var(--panel); stroke: var(--accent); stroke-width: 1.8; }
+svg .filebox { fill: var(--file-soft); stroke: var(--file); stroke-width: 1.8; }
+svg .t-file { fill: var(--file); }
+svg .arrow { stroke: var(--ink-2); stroke-width: 1.6; fill: none; }
+svg .arrow-live { stroke: var(--accent); stroke-width: 1.4; fill: none; stroke-dasharray: 4 4; }
+svg .head { fill: var(--ink-2); }
+svg .head-live { fill: var(--accent); }
+
+/* cards and grids */
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.card .tag { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
+.card p { font-size: 0.97rem; color: var(--ink-2); }
+.card ul { margin: 0; padding-left: 1.1rem; font-size: 0.95rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 0.25rem; }
+
+/* package stack */
+.stack { display: flex; flex-direction: column; gap: 6px; }
+.layer { display: grid; grid-template-columns: 9.5rem 1fr; gap: 1rem; align-items: baseline; padding: 0.7rem 1rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.layer .pkg { font-family: var(--mono); font-weight: 600; font-size: 0.92rem; color: var(--accent); }
+.layer p { font-size: 0.97rem; min-width: 0; }
+.layer.front { border-left: 3px solid var(--file); }
+.layer.front .pkg { color: var(--file); }
+.stack-note { font-size: 0.9rem; color: var(--ink-2); }
+@media (max-width: 560px) { .layer { grid-template-columns: 1fr; gap: 0.2rem; } }
+
+/* edit journey */
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.9rem; padding: 0.9rem 0; border-top: 1px solid var(--line); }
+ol.steps li:last-child { border-bottom: 1px solid var(--line); }
+ol.steps li::before { content: counter(s); font-family: var(--display); font-weight: 800; font-size: 1.5rem; color: var(--accent); line-height: 1.2; }
+ol.steps h3 { margin-bottom: 0.25rem; }
+ol.steps p { color: var(--ink-2); font-size: 0.98rem; min-width: 0; }
+.steps-wrap { min-width: 0; }
+
+pre.ged {
+  margin: 0; background: var(--code-bg); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto;
+  font: 400 0.85rem/1.55 var(--mono); color: var(--ink);
+}
+pre.ged .lv { color: var(--ink-2); }
+pre.ged .tg { color: var(--accent); font-weight: 600; }
+pre.ged .new { background: var(--file-soft); color: var(--file); border-radius: 3px; padding: 0 2px; }
+.two { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+
+footer { color: var(--ink-2); font-size: 0.9rem; border-top: 1px solid var(--line); padding-top: 1.2rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="gedline"><span>0 HEAD</span> · <span>1 GEDC</span> · <span>2 VERS <b>5.5.1 / 7.0</b></span></div>
+    <h1>gedcom-studio architecture</h1>
+    <p class="lede">One background process holds your open GEDCOM files. The terminal shell, the web app on your phone and the desktop app all work through it, so they share one set of edits. Nothing reaches the file on disk until one of them saves.</p>
+  </header>
+
+  <section aria-labelledby="h-shape">
+    <div class="eyebrow">The shape</div>
+    <h2 id="h-shape">Three front ends, one daemon, one file</h2>
+    <figure class="figure">
+      <svg viewBox="0 0 900 380" role="img" aria-labelledby="dg-title dg-desc">
+        <title id="dg-title">System diagram</title>
+        <desc id="dg-desc">The shell, web app and desktop app connect to the daemon. Shell lines go to shell sessions; the apps use the HTTP API. Both go through the Store, which guards the in-memory Genealogy. The file is read on open and written on save. The API sends live change notices back to the apps.</desc>
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-live" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- clients -->
+        <rect class="client" x="16" y="36" width="184" height="72" rx="8"/>
+        <text class="t-title" x="32" y="66">Shell</text>
+        <text class="t-sub" x="32" y="88">terminal: gedcom-shell</text>
+
+        <rect class="client" x="16" y="154" width="184" height="72" rx="8"/>
+        <text class="t-title" x="32" y="184">Web app</text>
+        <text class="t-sub" x="32" y="206">browser or phone (PWA)</text>
+
+        <rect class="client" x="16" y="272" width="184" height="72" rx="8"/>
+        <text class="t-title" x="32" y="302">Desktop app</text>
+        <text class="t-sub" x="32" y="324">Swing + FlatLaf</text>
+
+        <!-- daemon -->
+        <rect class="daemon" x="252" y="12" width="424" height="356" rx="12"/>
+        <text class="t-daemon" x="270" y="34">DAEMON · ONE PROCESS · :7380</text>
+
+        <rect class="box" x="276" y="48" width="164" height="64" rx="8"/>
+        <text class="t-title" x="290" y="75">Shell sessions</text>
+        <text class="t-sub" x="290" y="96">commands run in here</text>
+
+        <rect class="box" x="276" y="150" width="164" height="196" rx="8"/>
+        <text class="t-title" x="290" y="177">HTTP API</text>
+        <text class="t-sub" x="290" y="198">/api/v1 · JSON · token</text>
+        <text class="t-mono" x="290" y="232">Views  → JSON</text>
+        <text class="t-mono" x="290" y="254">RecordEdits</text>
+        <text class="t-mono" x="290" y="276">changes (long poll)</text>
+        <text class="t-mono" x="290" y="298">signed photo URLs</text>
+        <text class="t-mono" x="290" y="320">serves the web app</text>
+
+        <rect class="core" x="490" y="120" width="166" height="88" rx="8"/>
+        <text class="t-title" x="506" y="148">Store</text>
+        <text class="t-sub" x="506" y="170">one per open file</text>
+        <text class="t-sub" x="506" y="190">lock + revision</text>
+
+        <rect class="core" x="490" y="246" width="166" height="88" rx="8"/>
+        <text class="t-title" x="506" y="274">Genealogy</text>
+        <text class="t-sub" x="506" y="296">GEDCOM tree + indexes</text>
+        <text class="t-sub" x="506" y="316">unsaved edits live here</text>
+
+        <!-- file -->
+        <path class="filebox" d="M714,246 h146 l22,22 v66 h-168 z"/>
+        <path class="filebox" d="M860,246 v22 h22"/>
+        <text class="t-title t-file" x="730" y="278">FILE.ged</text>
+        <text class="t-sub" x="730" y="300">read on open</text>
+        <text class="t-sub" x="730" y="318">written on save</text>
+
+        <!-- client arrows -->
+        <line class="arrow" x1="200" y1="80" x2="274" y2="80" marker-end="url(#ah)"/>
+        <text class="t-label" x="208" y="72">lines</text>
+        <line class="arrow" x1="200" y1="182" x2="274" y2="182" marker-end="url(#ah)"/>
+        <text class="t-label" x="208" y="174">HTTPS/HTTP</text>
+        <line class="arrow-live" x1="274" y1="204" x2="202" y2="204" marker-end="url(#ahl)"/>
+        <text class="t-label" x="212" y="222">changes</text>
+        <line class="arrow" x1="200" y1="300" x2="274" y2="300" marker-end="url(#ah)"/>
+        <text class="t-label" x="208" y="292">HTTP</text>
+        <line class="arrow-live" x1="274" y1="322" x2="202" y2="322" marker-end="url(#ahl)"/>
+        <text class="t-label" x="212" y="340">changes</text>
+
+        <!-- internal arrows -->
+        <path class="arrow" d="M440,80 H466 V146 H488" marker-end="url(#ah)"/>
+        <line class="arrow" x1="440" y1="182" x2="488" y2="182" marker-end="url(#ah)"/>
+        <line class="arrow" x1="573" y1="208" x2="573" y2="244" marker-end="url(#ah)"/>
+        <line class="arrow" x1="656" y1="282" x2="712" y2="282" marker-end="url(#ah)" marker-start="url(#ah)"/>
+        <text class="t-label" x="664" y="272">open</text>
+        <text class="t-label" x="664" y="302">save</text>
+      </svg>
+      <figcaption>Solid arrows are requests. Dashed arrows are live change notices: each app keeps a long poll open and reloads what it shows when the file's revision moves on.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h-why">
+    <div class="eyebrow">Why it's built this way</div>
+    <h2 id="h-why">Decisions that shape everything else</h2>
+    <div class="grid3">
+      <div class="card">
+        <span class="tag">one door</span>
+        <h3>Everything goes through the Store</h3>
+        <p>Shell commands run holding its write lock and API reads share its read lock. Its revision number goes up on every change and every save, which is how every front end knows to refresh.</p>
+      </div>
+      <div class="card">
+        <span class="tag">your machine only</span>
+        <h3>No server to host</h3>
+        <p>The daemon runs as you, on your computer. Phones reach it over the local network or Tailscale. There's no cloud copy and no offline sync to reconcile.</p>
+      </div>
+      <div class="card">
+        <span class="tag">shared rules</span>
+        <h3>The apps reuse the shell's rules</h3>
+        <p>Adding, linking and unlinking people run the shell's own commands, so the family rules (when a family is created or removed, which links are refused) live in one place.</p>
+      </div>
+      <div class="card">
+        <span class="tag">nothing lost</span>
+        <h3>Unsaved edits are never dropped</h3>
+        <p>The daemon won't stop while files have unsaved edits unless forced, and a forced or signalled stop writes copies to <code>~/.gedcom-shell/recovery/</code>.</p>
+      </div>
+      <div class="card">
+        <span class="tag">no dependencies</span>
+        <h3>The core is plain Java</h3>
+        <p>The shell, daemon and web app have no runtime dependencies. The web app is plain HTML, CSS and JavaScript with no build step. Only the desktop app adds a library (FlatLaf).</p>
+      </div>
+      <div class="card">
+        <span class="tag">lossless</span>
+        <h3>The file is a tree first</h3>
+        <p>The parser keeps every line as a generic node, and people and families are views over those nodes. Tags it doesn't understand survive a save untouched.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-edit">
+    <div class="eyebrow">Following one edit</div>
+    <h2 id="h-edit">What happens when you add a graduation date on your phone</h2>
+    <div class="two">
+      <div class="steps-wrap">
+        <ol class="steps">
+          <li><div><h3>The form remembers what it showed</h3><p>The edit form is prefilled from the person's JSON. Each event carries a <code>ref</code> like <code>GRAD:0</code> (the first GRAD line) and its current fields.</p></div></li>
+          <li><div><h3>The app sends only the change</h3><p><code>POST people/I0/edit</code> with the new date and the value it saw: <code>seen: {date: ""}</code>, <code>set: {date: "dec 1997"}</code>.</p></div></li>
+          <li><div><h3>Everything is checked before anything is applied</h3><p>Under the Store's write lock, every <code>seen</code> value is compared with the file as it is now. If someone changed it meanwhile, the reply is <code>409</code> and nothing is applied. A bad date gets <code>422</code>, also with nothing applied.</p></div></li>
+          <li><div><h3>The tree changes in memory</h3><p>The date line is written under the GRAD record, <code>CHAN</code> is touched, indexes update, and the revision goes up. The file on disk is unchanged.</p></div></li>
+          <li><div><h3>Everyone else catches up</h3><p>The desktop app's long poll returns the new revision. It reloads the page, and an open edit form for that same person shows "changed elsewhere". The shell sees it at its next command.</p></div></li>
+          <li><div><h3>Someone saves</h3><p>Ctrl/⌘-S in an app or <code>save</code> in the shell writes the whole tree back to the file.</p></div></li>
+        </ol>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.8rem;min-width:0">
+        <span class="eyebrow">In the file after saving</span>
+<pre class="ged"><span class="lv">0</span> @I0@ <span class="tg">INDI</span>
+<span class="lv">1</span> <span class="tg">NAME</span> Tomás Iker /Fábregas/
+<span class="lv">1</span> <span class="tg">BIRT</span>
+<span class="lv">2</span> <span class="tg">DATE</span> 14 MAR 1979
+<span class="lv">1</span> <span class="tg">GRAD</span>
+<span class="lv">2</span> <span class="tg">TYPE</span> Técnico Químico
+<span class="new"><span class="lv">2</span> <span class="tg">DATE</span> DEC 1997</span>
+<span class="lv">2</span> <span class="tg">NOTE</span> IESA, Segovia.
+<span class="lv">1</span> <span class="tg">CHAN</span>
+<span class="lv">2</span> <span class="tg">DATE</span> 21 NOV 2026</pre>
+        <p class="stack-note">The test fixtures' made-up person. The new line goes after <code>TYPE</code>, and the note that was there stays where it was.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-code">
+    <div class="eyebrow">Inside the code</div>
+    <h2 id="h-code">Packages, from the bytes up</h2>
+    <p class="col">Maven modules: <code>core</code> builds <code>gedcom-shell.jar</code> (shell, daemon, web app), and <code>desktop</code> builds a shaded jar with the Swing app. Each layer below uses only the layers under it.</p>
+    <div class="stack">
+      <div class="layer front"><span class="pkg">desktop/</span><p>The Swing app, a client of the daemon: page views, the tree chart, edit dialogs, and a ChangeWatcher that follows the revision.</p></div>
+      <div class="layer front"><span class="pkg">ged/web</span><p>The web app: plain JS modules served by the daemon, a service worker for installing to the home screen, and live updates over the same long poll.</p></div>
+      <div class="layer"><span class="pkg">ged.client</span><p>Finds the running daemon or starts one, and the attached terminal that sends your shell lines to it.</p></div>
+      <div class="layer"><span class="pkg">ged.daemon</span><p>HTTP server with token check and lock file, the API, Views (records as JSON), the Workspace of open files, shell sessions.</p></div>
+      <div class="layer"><span class="pkg">ged.shell</span><p>The shell and one class per command. Also run headless by the API for adds and links.</p></div>
+      <div class="layer"><span class="pkg">ged.edit</span><p>Forms and edits: PersonForm, FamilyForm, and RecordEdits (event, note and name refs, checked then applied as one plan).</p></div>
+      <div class="layer"><span class="pkg">ged.vfs</span><p>The filesystem view: people and families as directories, relatives as entries, path resolution.</p></div>
+      <div class="layer"><span class="pkg">ged.store</span><p>The Store: the lock and revision every front end goes through.</p></div>
+      <div class="layer"><span class="pkg">ged.model</span><p>Person, Family, Name, dates and calendars; Genealogy holds the indexes and answers relationship questions, cycle-safe.</p></div>
+      <div class="layer"><span class="pkg">ged.gedcom</span><p>Bytes to text to node tree: encoding detection (UTF-8, UTF-16, ANSEL, Latin-1), CONT/CONC, GEDCOM 5.5 to 7.0.</p></div>
+    </div>
+    <p class="stack-note">Small helpers sit beside these: <code>ged.json</code> (a strict JSON reader and writer) and <code>ged.text</code> (ANSI styles and width-aware tables).</p>
+  </section>
+
+  <section aria-labelledby="h-net">
+    <div class="eyebrow">Where it can be reached</div>
+    <h2 id="h-net">Three ways in, one token</h2>
+    <div class="grid3">
+      <div class="card">
+        <span class="tag">127.0.0.1:7380</span>
+        <h3>This computer</h3>
+        <p>The default. The shell and desktop app find the daemon through <code>~/.gedcom-shell/daemon.json</code> and start it if it isn't running.</p>
+      </div>
+      <div class="card">
+        <span class="tag">bind=0.0.0.0</span>
+        <h3>Local network</h3>
+        <p>Opt in through <code>daemon.properties</code>. Plain HTTP works on a trusted network; add your own TLS keystore for HTTPS.</p>
+      </div>
+      <div class="card">
+        <span class="tag">tailscale serve</span>
+        <h3>Tailscale (recommended)</h3>
+        <p>HTTPS from anywhere on your tailnet, with the daemon still bound to this computer only.</p>
+      </div>
+    </div>
+    <p class="col">Every request needs the token, even from this computer, because a proxy like <code>tailscale serve</code> makes remote requests look local. <code>gedcom-shell daemon pair</code> prints an address that hands the token to a browser. The web app sends it in a header, never a cookie, so other sites can't use it. Photos come from signed addresses so <code>&lt;img&gt;</code> tags work without exposing the token.</p>
+  </section>
+
+  <section aria-labelledby="h-fronts">
+    <div class="eyebrow">The front ends</div>
+    <h2 id="h-fronts">How each one talks to the daemon</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Front end</th><th>Connects by</th><th>Hears about changes</th><th>Without the daemon</th></tr></thead>
+        <tbody>
+          <tr><td>Shell</td><td>An attached session: each line runs in the daemon, output comes back. Forms open in your <code>$EDITOR</code>.</td><td>Re-points its paths at the next command</td><td><code>-S</code> reads the file in its own process, as gedcom-shell does</td></tr>
+          <tr><td>Web app</td><td>HTTP API from the browser, paired once with the token</td><td>Long poll on <code>changes</code>; open forms say "changed elsewhere"</td><td>Shows a reconnecting banner and retries</td></tr>
+          <tr><td>Desktop app</td><td>HTTP API through <code>DaemonClient</code>; starts the daemon if needed</td><td>ChangeWatcher long poll; open forms say "changed elsewhere"</td><td>Reconnects with growing pauses, then starts a new daemon</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-tests">
+    <div class="eyebrow">How it's checked</div>
+    <h2 id="h-tests">Tests at every layer</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Suite</th><th class="num">Tests</th><th>What they prove</th></tr></thead>
+        <tbody>
+          <tr><td>Core</td><td class="num">461</td><td>Parsing, model, shell commands, and the daemon over real HTTP. EchoTest edits each value and checks every place the API and shell show it.</td></tr>
+          <tr><td>Desktop</td><td class="num">46 + 39</td><td>View logic, plus UI tests that build the real windows against a real daemon. EchoUiTest checks each edit on every page, list and chart.</td></tr>
+          <tr><td>Web</td><td class="num">92</td><td>Playwright in Chromium at desktop and phone sizes, against a daemon started from the built jar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="col">CI runs all three on Java 25 and 26, on Ubuntu 24.04 with a virtual display for the desktop windows. Test fixtures use a made-up family, never real records.</p>
+  </section>
+
+  <section aria-labelledby="h-repos">
+    <div class="eyebrow">Around it</div>
+    <h2 id="h-repos">Related repositories</h2>
+    <div class="grid3">
+      <div class="card"><span class="tag">public</span><h3>gedcom-studio</h3><p>This project: daemon, web app, desktop app and the shell, together.</p></div>
+      <div class="card"><span class="tag">public</span><h3>gedcom-shell</h3><p>The original terminal-only tool it grew out of. Stays simple: one process, no daemon.</p></div>
+      <div class="card"><span class="tag">private</span><h3>Family data</h3><p>The real GEDCOM file and source scans live in a separate private repo, with personal papers in an encrypted one. Neither is part of the code.</p></div>
+    </div>
+  </section>
+
+  <footer>Written from the gedcom-studio source and docs (<code>README.md</code>, <code>docs/daemon.md</code>, <code>docs/api.md</code>) as of November 2026. This page is <code>docs/architecture.html</code> in the repository.</footer>
+</main>
+</body>
+</html>
