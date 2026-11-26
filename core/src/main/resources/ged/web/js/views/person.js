@@ -219,7 +219,9 @@ function familyCards(app, p) {
       placeholderRow('Add child', () => addRelativeDialog(app, p, 'child')),
     ]))];
   }
-  return p.families.map((f) => {
+  // A family marked hidden (`1 _HIDE Y`) is left out until the link after the
+  // others asks for it; its own page and every list still show it.
+  const cards = p.families.map((f) => {
     const partnerRole = f.partner ? (f.partner.sex === 'M' ? 'Husband' : f.partner.sex === 'F' ? 'Wife' : 'Partner') : '';
     const rows = [];
     if (f.partner) rows.push(personRow(fid, f.partner, { role: f.divorced ? 'Former ' + partnerRole.toLowerCase() : partnerRole, actions: [unlinkBtn(app, p, 'spouses/' + f.partner.key, f.partner, partnerRole.toLowerCase())] }));
@@ -259,6 +261,18 @@ function familyCards(app, p) {
       placeholderRow('Add child', () => addRelativeDialog(app, p, 'child', { family: f.family })),
     ]), { actions: [famMenu] });
   });
+  const hidden = cards.filter((c, i) => p.families[i].hidden);
+  if (!hidden.length) return cards;
+  hidden.forEach((c) => { c.hidden = true; });
+  const reveal = h('p.hidden-families', h('button.link-btn', {
+    type: 'button',
+    onclick: () => { hidden.forEach((c) => { c.hidden = false; }); reveal.remove(); },
+  }, hiddenLabel(hidden.length)));
+  return [...cards, reveal];
+}
+
+function hiddenLabel(n) {
+  return n === 1 ? 'Show 1 hidden family' : `Show ${n} hidden families`;
 }
 
 // ---- overview ------------------------------------------------------------------------

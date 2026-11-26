@@ -1,11 +1,13 @@
 // A family's events and notes, edited in its form, looked for on the family
 // page, the families list, both partners' pages and the descendants chart.
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { openFamily, heading, go, edit, save, tree, region, eventRow } from './family.js';
 
 let id;
+let path;
 test.beforeEach(async ({ page }) => {
-  ({ id } = await openFamily(page));
+  ({ id, path } = await openFamily(page));
   await go(page, id, 'families', 'F2');
   await expect(heading(page)).toHaveText('Tomás Iker Fábregas & Ana Pérez');
 });
@@ -81,4 +83,41 @@ test('a family’s notes', async ({ page }) => {
   await d.getByRole('textbox', { name: 'Note', exact: true }).fill('Civil wedding.');
   await save(d, 1);
   await expect(region(page, 'Notes').locator('.note-text')).toHaveText(['Civil wedding.']);
+});
+
+test('a hidden family: left off the partners’ pages behind a link, shown everywhere else', async ({ page }) => {
+  test.setTimeout(45_000);
+  let d = await edit(page);
+  const box = d.getByRole('checkbox', { name: 'Hide this family on person pages' });
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await save(d, 1);
+  await expect(page.locator('main .family-head .chip', { hasText: 'Hidden on person pages' })).toBeVisible();
+
+  for (const [key, title] of [['I0', 'Family with Ana'], ['I3', 'Family with Tomás Iker']]) {
+    await go(page, id, 'people', key);
+    await expect(region(page, title)).toHaveCount(0);
+    const show = page.locator('main').getByRole('button', { name: 'Show 1 hidden family' });
+    await show.click();
+    await expect(region(page, title)).toBeVisible();
+    await expect(show).toHaveCount(0);
+  }
+  await go(page, id, 'people', 'I0');
+  await expect(region(page, 'Parents')).toBeVisible();
+
+  await go(page, id, 'families');
+  await expect(page.locator('main .list-row', { hasText: 'Ana Pérez' })).toBeVisible();
+
+  await page.locator('.save-btn').click();
+  await expect(page.locator('.unsaved')).toBeHidden();
+  expect(readFileSync(path, 'utf8')).toContain('1 MARR\n2 DATE 2010\n1 _HIDE Y\n0 @N1@ NOTE');
+
+  await go(page, id, 'families', 'F2');
+  d = await edit(page);
+  await expect(box).toBeChecked();
+  await box.uncheck();
+  await save(d, 1);
+  await go(page, id, 'people', 'I0');
+  await expect(region(page, 'Family with Ana')).toBeVisible();
+  await expect(page.locator('main').getByRole('button', { name: /hidden famil/ })).toHaveCount(0);
 });

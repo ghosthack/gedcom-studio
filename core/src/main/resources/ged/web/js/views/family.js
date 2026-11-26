@@ -36,6 +36,7 @@ export async function familyView(app, key) {
 
   const married = f.events.find((e) => e.tag === 'MARR');
   const divorced = f.fields && f.fields.divorced === 'yes';
+  const hidden = f.fields && f.fields.hidden === 'yes';
 
   const addChild = () => {
     if (!anchor) return;
@@ -51,7 +52,8 @@ export async function familyView(app, key) {
   const head = h('header.page-head.family-head', [
     h('span.head-icon', icon('rings')),
     h('div.page-head-text', [
-      h('div.eyebrow', [chip(f.key, 'chip-mono'), divorced ? chip('Divorced', 'chip-warn') : null]),
+      h('div.eyebrow', [chip(f.key, 'chip-mono'), divorced ? chip('Divorced', 'chip-warn') : null,
+        hidden ? chip('Hidden on person pages', 'chip-quiet') : null]),
       h('h1.page-title-h', f.title),
       h('p.page-sub', [
         married ? ['Married', married.date ? ' ' + prettyDate(married.date) : '', married.place ? ' in ' + married.place : ''] : 'No marriage recorded',
