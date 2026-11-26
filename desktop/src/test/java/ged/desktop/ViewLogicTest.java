@@ -18,6 +18,12 @@ class ViewLogicTest {
     }
 
     @Test
+    void theLinkToHiddenFamilies() {
+        assertEquals("Show 1 hidden family", PersonView.hiddenLabel(1));
+        assertEquals("Show 3 hidden families", PersonView.hiddenLabel(3));
+    }
+
+    @Test
     void agesOnTheTimeline() {
         var death = new Model.Event("DEAT", "Died", "", "1920", 1920, "", "");
         var birth = new Model.Event("BIRT", "Born", "", "1850", 1850, "", "");

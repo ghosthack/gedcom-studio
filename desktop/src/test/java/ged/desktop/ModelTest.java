@@ -19,7 +19,7 @@ class ModelTest {
                          "siblings":[{"key":"I5","name":"Paolo Rossi"}]}],
              "halfSiblings":[],
              "families":[{"family":"F2","role":"wife","partner":{"key":"I2","name":"Marco Bianchi","surname":"Bianchi","sex":"M"},
-                          "married":{"tag":"MARR","label":"Married","date":"1875","year":1875},"divorced":false,
+                          "married":{"tag":"MARR","label":"Married","date":"1875","year":1875},"divorced":false,"hidden":true,
                           "children":[{"key":"I6","name":"Luca Bianchi"}]}],
              "notes":["n"],"photos":[{"url":"/u?sig=1","file":"p.jpg","title":"","date":"","crop":{"left":1,"top":2,"width":3,"height":4}},
                                      {"url":null,"file":"q.jpg","title":"Q","date":"","crop":null}],
@@ -41,6 +41,7 @@ class ModelTest {
         assertNull(p.photos().get(1).crop());
         assertEquals("12 JUN 1850", p.fields().get("birth.date"));
         assertEquals("1875", p.families().getFirst().married().date());
+        assertTrue(p.families().getFirst().hidden());
     }
 
     @Test

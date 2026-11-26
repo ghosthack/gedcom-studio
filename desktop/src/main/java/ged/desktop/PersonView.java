@@ -41,7 +41,28 @@ final class PersonView {
             right.add(Ui.section("Half-siblings", Icons.users(14),
                     PersonChip.grid(actions, p.halfSiblings(), 1, s -> null, p, s -> null)));
         }
-        for (var f : p.families()) right.add(family(p, f, actions));
+        // A family marked hidden (`1 _HIDE Y`) is left out until the link after the
+        // others asks for it; its own page and every list still show it.
+        var hidden = new ArrayList<JComponent>();
+        for (var f : p.families()) {
+            var v = family(p, f, actions);
+            right.add(v);
+            if (f.hidden()) {
+                v.setVisible(false);
+                hidden.add(v);
+            }
+        }
+        if (!hidden.isEmpty()) {
+            var reveal = Ui.transparent(new BorderLayout());
+            reveal.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+            reveal.add(Ui.link(hiddenLabel(hidden.size()), () -> {
+                hidden.forEach(v -> v.setVisible(true));
+                reveal.setVisible(false);
+                right.revalidate();
+                right.repaint();
+            }), BorderLayout.WEST);
+            right.add(reveal);
+        }
         right.add(addFamilyRow(p, actions));
 
         page.add(new Ui.Columns(left, right, 0.5, 16, 720));
@@ -285,6 +306,10 @@ final class PersonView {
         body.add(links);
         var title = f.partner() == null ? "Family " + f.family() : "Family with " + f.partner().given();
         return Ui.section(title, Icons.family(14), body);
+    }
+
+    static String hiddenLabel(int n) {
+        return n == 1 ? "Show 1 hidden family" : "Show " + n + " hidden families";
     }
 
     private static JComponent addFamilyRow(Model.Person p, Actions actions) {

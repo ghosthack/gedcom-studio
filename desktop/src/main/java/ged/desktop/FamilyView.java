@@ -25,6 +25,7 @@ final class FamilyView {
         if (!f.married().isBlank()) facts.add("Married " + f.married());
         facts.add(f.children().isEmpty() ? "No children" : f.children().size() == 1 ? "1 child" : f.children().size() + " children");
         if ("yes".equals(f.fields().get("divorced"))) facts.add("Divorced");
+        if ("yes".equals(f.fields().get("hidden"))) facts.add("Hidden on person pages");
         var line = Ui.label(String.join("   ·   ", facts));
         line.setFont(Ui.font(1, Font.PLAIN));
         line.setForeground(Ui.muted());
