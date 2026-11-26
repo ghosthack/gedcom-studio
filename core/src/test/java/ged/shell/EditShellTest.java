@@ -250,6 +250,22 @@ class EditShellTest {
     }
 
     @Test
+    void hiddenFamily() {
+        load(Fixtures.cousins());
+        var r = run("edit @F2@ hidden=yes");
+        assertTrue(r.contains("hidden") && r.contains("no → yes"), r);
+        assertTrue(g.render().contains("1 CHIL @I7@\n1 _HIDE Y\n0 @F3@ FAM"), g.render());
+        assertTrue(run("edit @F2@ hide=y").contains("no changes"));
+        assertTrue(run("edit @F2@ hidden=sometimes").contains("hidden must be yes or no, not 'sometimes'"));
+        assertTrue(run("ls /families").contains("F2"), "still listed");
+        run("edit @F2@ hidden=no");
+        assertFalse(g.render().contains("_HIDE"));
+        var help = run("help edit");
+        assertTrue(help.contains("  edit @F2@ divorced=yes hidden=yes\n"), help);
+        assertTrue(help.contains("divorce, divorceplace, hide\n"), help);
+    }
+
+    @Test
     void familyFormInTheEditor() {
         load(Fixtures.cousins());
         editorSteps.add(set("marriage.date", "1934-05-02").andThen(set("marriage.place", "Genova"))::apply);

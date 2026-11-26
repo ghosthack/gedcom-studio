@@ -94,7 +94,8 @@ that matched, or `""`. `sort` is `name` (surname, then given), `born` (the undat
               "siblings": [PERSON-SUMMARY...]}],
  "halfSiblings": [PERSON-SUMMARY...],
  "families": [{"family": "F2", "role": "wife", "partner": PERSON-SUMMARY|null,
-               "married": EVENT|null, "divorced": false, "children": [PERSON-SUMMARY...]}],
+               "married": EVENT|null, "divorced": false, "hidden": false,
+               "children": [PERSON-SUMMARY...]}],
  "notes": ["text…"],
  "photos": [{"url": "…?sig=…"|null, "file": "photos/maria.jpg", "title": "", "date": "",
              "crop": {"left":0,"top":0,"width":0,"height":0}|null}],
@@ -116,7 +117,7 @@ type. With several records of a tag, the form's fields are the first one's.
 the same shape, `depth` generations up (max 12).
 
 `GET files/ID/people/KEY/descendants?depth=3` → the person with
-`families: [{"family","partner","married":EVENT|null,"divorced","children":[same shape]}]`,
+`families: [{"family","partner","married":EVENT|null,"divorced","hidden","children":[same shape]}]`,
 `depth` generations down.
 
 `GET files/ID/people/KEY/photos/N?sig=…` → the picture's bytes (use the addresses given).
@@ -142,6 +143,10 @@ the same shape, `depth` generations up (max 12).
   `birth.date: 'sometime' is not a GEDCOM date; use 12 JUN 1850, …`.
 
 `POST files/ID/families/KEY/edit` works the same way on family fields, returning `family`.
+`{"set": {"hidden": "yes"}}` marks the family `1 _HIDE Y` (see the README's
+[Hidden families](../README.md#hidden-families)): a family's `hidden` is true in the person's
+`families` and in descendants, and person pages leave it out until asked to show it;
+`"no"` removes the mark.
 
 #### Everything else the pages show
 
@@ -218,7 +223,7 @@ In `name`, the surname goes between slashes; without them the last word is the s
 
 `GET files/ID/families/KEY` → `FAMILY-SUMMARY` plus
 `{"husband": PERSON-SUMMARY|null, "wife": …, "children": [PERSON-SUMMARY...], "events": [EVENT...],
-"notes": [...], "records": [...], "fields": {"marriage.date": …, "divorced": "no"}}`.
+"notes": [...], "records": [...], "fields": {"marriage.date": …, "divorced": "no", "hidden": "no"}}`.
 
 ## Notes, sources and media
 

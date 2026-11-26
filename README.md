@@ -238,6 +238,7 @@ and children are listed at the top for reference):
 edit /families/F4
 edit @F2@ married="12 jun 1870" marriage.place="Genova, Italia"
 edit @F2@ divorced=no divorce.date= divorce.place=
+edit @F2@ hidden=yes
 ```
 
 - **Dates are checked and normalised**: `12 june 1850` and `1850-06-12`
@@ -292,6 +293,31 @@ edit @F2@ divorced=no divorce.date= divorce.place=
   refused before anything is written. The write is atomic. Lines the
   parser could not read are kept where they were, and a file that mixes
   line endings keeps each line's own.
+
+### Hidden families
+
+A family can be marked hidden: `edit @F2@ hidden=yes` in the shell, or
+*Hidden* in the web and desktop apps' family editor. Person pages then
+leave it out of the person's families and offer "Show 1 hidden family"
+instead, which brings it back on that page. Nothing else changes: the
+family keeps its page, and stays in the family list, the charts, the
+sidebar and `ls`. It suits a divorce, say, that you rarely want in view.
+
+The mark is saved in the file as `1 _HIDE Y` on the `FAM` record (last, before
+any `CHAN`); `hidden=no` removes it. In a GEDCOM 7 file the header declares
+the extension tag:
+
+```
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SCHMA
+2 TAG _HIDE https://github.com/ghosthack/gedcom-studio#hidden-families
+```
+
+GEDCOM 5.5.1 needs no declaration: tags that start with `_` are for any
+program's own use. Other programs keep such tags they don't know or
+ignore them, so a hidden family is an ordinary family to them.
 
 ### Linking people
 

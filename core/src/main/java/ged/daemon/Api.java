@@ -630,7 +630,7 @@ final class Api {
         return key.endsWith(".date") ? "date" : key.endsWith(".place") ? "place"
                 : switch (key) {
                     case "sex" -> "sex";
-                    case "deceased", "divorced" -> "yesno";
+                    case "deceased", "divorced", "hidden" -> "yesno";
                     default -> "text";
                 };
     }
@@ -644,6 +644,7 @@ final class Api {
             case "sex" -> "Sex";
             case "deceased" -> "Deceased";
             case "divorced" -> "Divorced";
+            case "hidden" -> "Hidden";
             default -> {
                 var words = key.replace('.', ' ');
                 yield Character.toUpperCase(words.charAt(0)) + words.substring(1);

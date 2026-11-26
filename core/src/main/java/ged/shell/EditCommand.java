@@ -46,7 +46,7 @@ final class EditCommand implements Command {
                   edit emigrated=1890 cremated=1950
                   edit surname=Rossi given="Maria Luisa"
                   edit families/F4 married="12 jun 1870" marriage.place=Roma
-                  edit @F2@ divorced=yes
+                  edit @F2@ divorced=yes hidden=yes
 
                 Changes are held in memory (the prompt shows *) until you run `save`.
                 To change who belongs to a family, see `help link` and `help unlink`.
@@ -64,7 +64,7 @@ final class EditCommand implements Command {
                 Occupation, residence and the events and facts above edit the first
                 one recorded; others are kept.
                 Family fields: %s
-                  aliases: married, wedding, marriageplace, divorce, divorceplace
+                  aliases: married, wedding, marriageplace, divorce, divorceplace, hide
                 Dates: %s
                 """.formatted(
                 Style.wrap(personFields(f -> !f.isExtra(), false), "  ", 76),

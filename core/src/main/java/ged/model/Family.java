@@ -32,6 +32,12 @@ public record Family(
         return events.stream().filter(e -> e.tag().equals(tag)).findFirst();
     }
 
+    /// True if the record says `1 _HIDE Y` (any case): the family is left off
+    /// its members' person pages until asked for. It still exists everywhere else.
+    public boolean hidden() {
+        return node.all("_HIDE").anyMatch(h -> h.value().strip().equalsIgnoreCase("Y"));
+    }
+
     /// The partner of `personId` in this family, if recorded.
     public Optional<String> partnerOf(String personId) {
         if (husband.filter(personId::equals).isPresent()) return wife;

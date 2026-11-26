@@ -104,6 +104,7 @@ final class Views {
                     "partner", summary(partner),
                     "married", f.event("MARR").map(this::event).orElse(null),
                     "divorced", f.event("DIV").isPresent(),
+                    "hidden", f.hidden(),
                     "children", f.children().stream().flatMap(c -> g.person(c).stream()).map(this::summary).toList()));
         }
         out.put("families", families);
@@ -364,6 +365,7 @@ final class Views {
                         "partner", summary(f.partnerOf(p.id())),
                         "married", f.event("MARR").map(this::event).orElse(null),
                         "divorced", f.event("DIV").isPresent(),
+                        "hidden", f.hidden(),
                         "children", f.children().stream().flatMap(c -> g.person(c).stream())
                                 .map(c -> descendants(c, down - 1, seen)).toList()));
             }

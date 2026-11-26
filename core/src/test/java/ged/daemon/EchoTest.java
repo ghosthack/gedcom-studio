@@ -545,6 +545,39 @@ class EchoTest {
             edit("families/F2", obj("set", obj("divorced", "no")));
             assertEquals(false, withKey(list(person("I5").get("families")), "F2").get("divorced"));
         }
+
+        @Test
+        void theHiddenFieldOfTheForm() throws IOException {
+            assertEquals(false, withKey(list(person("I5").get("families")), "F2").get("hidden"));
+            assertEquals("no", map(family("F2").get("fields")).get("hidden"));
+            edit("families/F2", obj("set", obj("hidden", "yes"), "seen", obj("hidden", "no")));
+            for (var who : List.of("I3", "I5")) {
+                var f2 = withKey(list(person(who).get("families")), "F2");
+                assertEquals(true, f2.get("hidden"));
+                var keys = List.copyOf(f2.keySet());
+                assertEquals(keys.indexOf("divorced") + 1, keys.indexOf("hidden"), keys.toString());
+            }
+            assertEquals("yes", map(family("F2").get("fields")).get("hidden"));
+            var chart = list(client.get(f("people/I3/descendants?depth=1")).get("families")).getFirst();
+            assertEquals(true, chart.get("hidden"));
+            var keys = List.copyOf(chart.keySet());
+            assertEquals(keys.indexOf("divorced") + 1, keys.indexOf("hidden"), keys.toString());
+            // nothing else hides it
+            assertNotNull(withKey(list(client.get(f("families")).get("families")), "F2"));
+            assertTrue(lineWith(shell("ls /families"), " F2 ").contains("F2"));
+            assertTrue(shell("edit @F2@ hidden=yes").contains("no changes"));
+
+            var refused = assertThrows(DaemonClient.ApiException.class, () -> client.post(f("families/F2/edit"),
+                    obj("set", obj("hidden", "perhaps"))));
+            assertEquals(422, refused.status);
+
+            client.post(f("save"), obj());
+            assertTrue(Files.readString(ged).contains("1 _HIDE Y"));
+            edit("families/F2", obj("set", obj("hidden", "no")));
+            assertEquals(false, withKey(list(person("I5").get("families")), "F2").get("hidden"));
+            client.post(f("save"), obj());
+            assertFalse(Files.readString(ged).contains("_HIDE"));
+        }
     }
 
     // ---- other names and nicknames ----------------------------------------------
