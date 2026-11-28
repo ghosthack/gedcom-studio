@@ -257,6 +257,8 @@ class DaemonTest {
         assertEquals("life", birth.get("group"));
         assertEquals("Birth date", birth.get("label"));
         assertTrue(list(fields.get("family")).stream().anyMatch(x -> x.get("key").equals("divorced") && x.get("kind").equals("yesno")));
+        var hidden = list(fields.get("family")).getLast();
+        assertEquals(List.of("hidden", "Hidden", "yesno"), List.of(hidden.get("key"), hidden.get("label"), hidden.get("kind")));
         assertNotNull(Json.write(fields));
     }
 

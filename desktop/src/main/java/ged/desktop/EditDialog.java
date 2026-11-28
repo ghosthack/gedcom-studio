@@ -255,7 +255,8 @@ final class EditDialog extends JDialog {
         this.openRecord = openRecord;
         this.datesHint = datesHint;
         this.shown = content;
-        this.nameDefs = defs.stream().filter(d -> d.group().equals("name")).toList();
+        // a person's name fields; a family's `hidden` (`1 _HIDE Y`), its other fields being the events
+        this.nameDefs = defs.stream().filter(d -> replyKey.equals("family") ? d.key().equals("hidden") : d.group().equals("name")).toList();
         var nameFields = new LinkedHashMap<String, String>();
         for (var d : nameDefs) nameFields.put(d.key(), content.fields().getOrDefault(d.key(), ""));
         this.session = new EditSession(nameFields);
@@ -367,7 +368,11 @@ final class EditDialog extends JDialog {
             form.add(row);
         }
 
-        form.add(header("Events", content.names() == null));
+        if (content.names() == null && !nameDefs.isEmpty()) {
+            form.add(header("Person pages", true));
+            for (var d : nameDefs) form.add(fieldRow(d, content.fields()));
+        }
+        form.add(header("Events", content.names() == null && nameDefs.isEmpty()));
         form.add(lists.get(ListKind.EVENTS));
         for (var e : content.events()) addEvent(e.tag(), e.ref(), e.fields(), e.details());
         addEvent.addActionListener(e -> showAddMenu());
@@ -428,7 +433,7 @@ final class EditDialog extends JDialog {
         var ed = editor(def, fields.getOrDefault(def.key(), ""));
         var row = Ui.transparent(new GridBagLayout());
         row.add(rowLabel(def.label()), labelAt(0));
-        boolean grow = !def.kind().equals("sex");
+        boolean grow = !def.kind().equals("sex") && !def.kind().equals("yesno");
         row.add(ed.component(), cell(1, 0, 1, grow ? 1 : 0, 0, new Insets(4, 0, 4, 0)));
         if (!grow) row.add(Box.createHorizontalGlue(), cell(2, 0, 1, 1, 0, new Insets(0, 0, 0, 0)));
         return row;
@@ -443,6 +448,11 @@ final class EditDialog extends JDialog {
             combo.getAccessibleContext().setAccessibleName(f.label());
             ed = new Editor(f, combo, () -> codes[Math.max(0, combo.getSelectedIndex())],
                     v -> combo.setSelectedIndex(Math.max(0, Arrays.asList(codes).indexOf(v.isBlank() ? "U" : v))));
+        } else if (f.kind().equals("yesno")) {
+            var box = new javax.swing.JCheckBox(f.key().equals("hidden") ? "Hide this family on person pages" : f.label(), value.equals("yes"));
+            box.setOpaque(false);
+            box.getAccessibleContext().setAccessibleName(f.label());
+            ed = new Editor(f, box, () -> box.isSelected() ? "yes" : "no", v -> box.setSelected(v.equals("yes")));
         } else {
             var field = textField(value, f.label(), f.label());
             ed = new Editor(f, field, field::getText, v -> {

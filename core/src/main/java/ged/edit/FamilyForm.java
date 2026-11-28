@@ -12,8 +12,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-/// The editable view of a family: marriage and divorce, as a `field: value`
-/// form like [PersonForm]. Who belongs to the family is changed with
+/// The editable view of a family: marriage, divorce and whether person pages
+/// hide it, as a `field: value` form like [PersonForm]. Who belongs to the family is changed with
 /// `link` and `unlink`, not here; the form lists them as comments.
 public final class FamilyForm {
     private FamilyForm() {}
@@ -23,7 +23,8 @@ public final class FamilyForm {
         MARRIAGE_PLACE("marriage.place"),
         DIVORCE_DATE("divorce.date"),
         DIVORCE_PLACE("divorce.place"),
-        DIVORCED("divorced");
+        DIVORCED("divorced"),
+        HIDDEN("hidden");
 
         public final String key;
 
@@ -39,6 +40,7 @@ public final class FamilyForm {
                 case "marriageplace", "married.place", "wedding.place" -> "marriage.place";
                 case "divorce", "div", "divorcedate" -> "divorce.date";
                 case "divorceplace" -> "divorce.place";
+                case "hide", ".hide" -> "hidden";
                 default -> n;
             };
             return Arrays.stream(values()).filter(f -> f.key.equals(alias)).findFirst();
@@ -56,6 +58,7 @@ public final class FamilyForm {
         v.put(Field.DIVORCE_DATE, n.first("DIV").map(d -> d.text("DATE")).orElse(""));
         v.put(Field.DIVORCE_PLACE, n.first("DIV").map(d -> d.text("PLAC")).orElse(""));
         v.put(Field.DIVORCED, n.first("DIV").isPresent() ? "yes" : "no");
+        v.put(Field.HIDDEN, f.hidden() ? "yes" : "no");
         return v;
     }
 
@@ -79,6 +82,7 @@ public final class FamilyForm {
                 #             BET 1800 AND 1810 · FROM 1914 TO 1918 · (free text)
                 #             1850-06-12 and "12 june 1850" are converted for you
                 #   divorced  yes or no; a divorce date or place implies yes
+                #   hidden    yes or no; yes hides the family on person pages (saved as _HIDE Y)
 
                 """);
         Field previous = null;
@@ -132,7 +136,7 @@ public final class FamilyForm {
             wanted.put(field, switch (field) {
                 case MARRIAGE_DATE, DIVORCE_DATE -> Records.date(field.key, v, current.get(field), gedcom7);
                 case MARRIAGE_PLACE, DIVORCE_PLACE -> v;
-                case DIVORCED -> Records.yesNo(field.key, v);
+                case DIVORCED, HIDDEN -> Records.yesNo(field.key, v);
             });
         }
 
@@ -193,7 +197,39 @@ public final class FamilyForm {
             Records.event(rec, "DIV", n -> n.insertAfter(LEADING, "DIV", ""),
                     after.get(Field.DIVORCE_DATE), after.get(Field.DIVORCE_PLACE), true);
         }
+        var hidden = after.get(Field.HIDDEN);
+        if ("no".equals(hidden)) {
+            rec.all("_HIDE").toList().forEach(rec::remove);
+        } else if ("yes".equals(hidden)) {
+            hide(g, rec);
+        }
         Records.touch(rec, g.isGedcom7());
         return g.updated(f);
+    }
+
+    /// The GEDCOM 7 schema URI that declares `_HIDE` (see the README).
+    public static final String HIDE_URI = "https://github.com/ghosthack/gedcom-studio#hidden-families";
+
+    /// Marks the record `1 _HIDE Y`: an existing `_HIDE` line is set to `Y`,
+    /// else a new one goes last, before a `CHAN` (which programs keep last).
+    /// A GEDCOM 7 file declares the extension tag in its header.
+    private static void hide(Genealogy g, Node rec) {
+        var existing = rec.first("_HIDE");
+        if (existing.isPresent()) existing.get().setValue("Y");
+        else rec.insertBefore(List.of("CHAN"), "_HIDE", "Y");
+        if (g.isGedcom7()) declareHide(g);
+    }
+
+    /// Adds `2 TAG _HIDE <uri>` under the header's `SCHMA` (made after `GEDC`
+    /// if there is none), unless `_HIDE` is declared there already. GEDCOM
+    /// 5.5.1 needs no declaration for an underscore tag.
+    private static void declareHide(Genealogy g) {
+        var head = g.header().orElse(null);
+        if (head == null) return;
+        var schma = head.first("SCHMA").orElse(null);
+        if (schma != null && schma.all("TAG").anyMatch(t -> t.value().strip().split("\\s+")[0].equals("_HIDE"))) return;
+        if (schma == null) schma = head.insertAfter(List.of("GEDC"), "SCHMA", "");
+        schma.insert(Integer.MAX_VALUE, "TAG", "_HIDE " + HIDE_URI);
+        g.updated(head);
     }
 }

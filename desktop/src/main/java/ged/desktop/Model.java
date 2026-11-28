@@ -162,11 +162,13 @@ final class Model {
         }
     }
 
+    /// `hidden`: the family is marked `1 _HIDE Y`, so the person page leaves it out until asked.
     record OwnFamily(String family, String role, PersonSummary partner, Event married, boolean divorced,
-                     List<PersonSummary> children) {
+                     boolean hidden, List<PersonSummary> children) {
         static OwnFamily from(Map<String, Object> m) {
             return new OwnFamily(str(m, "family"), str(m, "role"), summary(m, "partner"),
-                    Event.from(map(m, "married")), bool(m, "divorced"), list(m, "children", PersonSummary::from));
+                    Event.from(map(m, "married")), bool(m, "divorced"), bool(m, "hidden"),
+                    list(m, "children", PersonSummary::from));
         }
     }
 

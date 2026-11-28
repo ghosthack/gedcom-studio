@@ -617,6 +617,43 @@ class EchoUiTest {
         assertTrue(saveFile().contains("1 DIV\n2 DATE 2015\n"), saveFile());
     }
 
+    @Test
+    void aHiddenFamilyIsLeftOffThePersonPageUntilAskedFor() throws Exception {
+        go(new Place.FamilyPage("F1"));
+        var form = editFamily("F1");
+        onEdt(() -> {
+            var box = UiTest.find(form, javax.swing.JCheckBox.class, c -> "Hidden".equals(c.getAccessibleContext().getAccessibleName()), "hidden");
+            assertFalse(box.isSelected());
+            box.doClick();
+            button(form, "Save").doClick();
+        });
+        closed(form);
+        eventually(() -> assertTrue(texts().contains("Married 2010   ·   1 child   ·   Hidden on person pages"), texts().toString()));
+        go(new Place.PersonPage("I3"));
+        eventually(() -> {
+            assertTrue(links().contains("Show 1 hidden family"), links().toString());
+            assertFalse(shownTexts().contains("Married  ·  2010  ·  Cuenca"), shownTexts().toString());
+        });
+        onEdt(() -> {
+            var link = UiTest.find(page(), Ui.LinkLabel.class, l -> l.getText().equals("Show 1 hidden family"), "show link");
+            link.dispatchEvent(new java.awt.event.MouseEvent(link, java.awt.event.MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(),
+                    0, 1, 1, 1, false, java.awt.event.MouseEvent.BUTTON1));
+        });
+        eventually(() -> {
+            assertTrue(shownTexts().contains("Married  ·  2010  ·  Cuenca"), shownTexts().toString());
+            assertFalse(shownTexts().contains("Show 1 hidden family"));
+        });
+        go(new Place.RecordList("families"));
+        eventually(() -> assertTrue(listRows().contains("Tomás Iker Fábregas & Ana Pérez | Married 2010  ·  1 child | F1"),
+                listRows().toString()));
+        var again = editFamily("F1");
+        onEdt(() -> {
+            assertTrue(UiTest.find(again, javax.swing.JCheckBox.class, c -> "Hidden".equals(c.getAccessibleContext().getAccessibleName()), "hidden").isSelected());
+            again.dispose();
+        });
+        assertTrue(saveFile().contains("1 _HIDE Y\n"), saveFile());
+    }
+
     // ---- sources and media ---------------------------------------------------------------
 
     @Test
@@ -868,7 +905,17 @@ class EchoUiTest {
         return out;
     }
 
-    private List<String> links() {
+    /// The labels a person sees: those whose every container up to the page is visible.
+    private List<String> shownTexts() {
+        var out = new ArrayList<String>();
+        walk(page(), c -> {
+            for (java.awt.Component k = c; k != null && k != page(); k = k.getParent()) if (!k.isVisible()) return;
+            if (c instanceof JLabel l && l.getText() != null && !l.getText().isEmpty()) out.add(l.getText());
+        });
+        return out;
+    }
+
+        private List<String> links() {
         var out = new ArrayList<String>();
         walk(page(), c -> { if (c instanceof Ui.LinkLabel l) out.add(l.getText()); });
         return out;

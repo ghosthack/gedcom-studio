@@ -481,8 +481,9 @@ function openEditor(app, cfg) {
   let shell = null;
   const onChange = () => { if (shell) shell.updateSaveLabel(); refreshPicker(); };
 
-  // ---- name fields (set/seen), as before
-  const defs = isPerson ? app.fields.person.filter((x) => x.group === 'name') : [];
+  // ---- name fields (set/seen), as before; a family's `hidden` (`1 _HIDE Y`) the same way.
+  // Its other fields (marriage, divorce) are the events below.
+  const defs = isPerson ? app.fields.person.filter((x) => x.group === 'name') : app.fields.family.filter((x) => x.key === 'hidden');
   const labels = new Map(defs.map((x) => [x.key, x.label]));
   let seen = {};
   for (const x of defs) seen[x.key] = subject.fields && subject.fields[x.key] != null ? String(subject.fields[x.key]) : '';
@@ -501,12 +502,21 @@ function openEditor(app, cfg) {
         if (v === '' && !el.querySelector('option[value=""]')) el.prepend(h('option', { value: '' }, 'Not recorded'));
         el.value = v;
       };
+    } else if (x.kind === 'yesno') {
+      el = h('input.check', { id, name: x.key, type: 'checkbox' });
+      get = () => (el.checked ? 'yes' : 'no');
+      set = (v) => { el.checked = v === 'yes'; };
     } else {
       el = h('input.input', { id, name: x.key, type: 'text', autocomplete: 'off', spellcheck: 'true' });
       get = () => el.value.trim();
       set = (v) => { el.value = v; };
     }
-    wrap.append(h('label.field-label', { for: id }, x.label), el, h('div.field-note'));
+    if (x.kind === 'yesno') {
+      const text = x.key === 'hidden' ? 'Hide this family on person pages' : x.label;
+      wrap.append(h('label.check-field', { for: id }, [el, h('span', text)]), h('div.field-note'));
+    } else {
+      wrap.append(h('label.field-label', { for: id }, x.label), el, h('div.field-note'));
+    }
     set(seen[x.key]);
     const i = { get, set, el, wrap, norm: (v) => String(v == null ? '' : v).trim(), label: x.label };
     const mark = () => { wrap.classList.toggle('is-changed', get() !== seen[x.key]); if (wrap.classList.contains('note-error')) partNote(i, null, null); onChange(); };
@@ -819,6 +829,9 @@ function openEditor(app, cfg) {
       nickWrap,
       h('div.list-add', addNickBtn),
     ]));
+  }
+  if (!isPerson && defs.length) {
+    sections.push(group('Person pages', 'pages', [h('div.form-rows', defs.map(nameControl))]));
   }
   sections.push(group('Events', 'events', [
     events.el,
